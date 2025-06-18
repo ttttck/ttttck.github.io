@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Hệ Thống Chịch Xong Vả Mặt - Audio</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    select, button, input[type=range], label {
+      margin: 5px;
+    }
+    #textDisplay {
+      margin-top: 20px;
+      padding: 10px;
+      background-color: #fff;
+      border: 1px solid #ccc;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    span.word {
+      cursor: pointer;
+    }
+    span.word:hover {
+      background-color: yellow;
+    }
+  </style>
+</head>
+<body>
+  <h2>📖 Audio Truyện: Hệ Thống Chịch Xong Vả Mặt</h2>
+
+  <label for="chapter">Chọn chương:</label>
+  <select id="chapter"></select>
+
+  <label for="rate">Tốc độ đọc:</label>
+  <input type="range" id="rate" min="0.5" max="2" value="1" step="0.1">
+
+  <label><input type="checkbox" id="autoNext"> Tự động chuyển chương tiếp theo</label><br>
+
+  <button onclick="playText()">▶️ Phát</button>
+  <button onclick="pauseText()">⏸️ Tạm dừng</button>
+  <button onclick="resumeText()">⏯️ Tiếp tục</button>
+  <button onclick="stopText()">⏹️ Dừng</button>
+
+  <div id="textDisplay"></div>
+
+  <script>
+    const chapterSelect = document.getElementById("chapter");
+    const textDisplay = document.getElementById("textDisplay");
+    const rateControl = document.getElementById("rate");
+    const autoNextCheckbox = document.getElementById("autoNext");
+
+    let utterance;
+    let fullText = "";
+    let words = [];
+
+    // Tạo danh sách chương
+    const totalChapters = 64;
+    for (let i = 0; i <= totalChapters; i++) {
+      const value = i.toString().padStart(4, '0') + ".txt";
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = "Chương " + i.toString().padStart(2, '0');
+      chapterSelect.appendChild(option);
+    }
+
+    chapterSelect.addEventListener("change", fetchChapter);
+
+    function fetchChapter() {
+      const url = `https://ttttck.github.io/hethongchichxongvamat/${chapterSelect.value}`;
+      fetch(url)
+        .then(res => res.text())
+        .then(text => {
+          fullText = text;
+          displayText(text);
+        })
+        .catch(err => {
+          textDisplay.textContent = "❌ Không tải được chương.";
+          console.error(err);
+        });
+    }
+
+    function displayText(text) {
+      const wordArray = text.split(/\s+/);
+      textDisplay.innerHTML = wordArray.map((word, i) => `<span class="word" onclick="speakFrom(${i})">${word}</span>`).join(" ");
+      words = wordArray;
+    }
+
+    function speakFrom(index) {
+      stopText();
+      const sliced = words.slice(index).join(" ");
+      speakText(sliced);
+    }
+
+    function speakText(text) {
+      utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'vi-VN';
+      utterance.rate = parseFloat(rateControl.value);
+
+      // Sự kiện khi đọc xong toàn bộ văn bản
+      utterance.onend = () => {
+        if (autoNextCheckbox.checked) {
+          goToNextChapter();
+        }
+      };
+
+      speechSynthesis.speak(utterance);
+    }
+
+    function playText() {
+      stopText();
+      speakText(fullText);
+    }
+
+    function pauseText() {
+      if (speechSynthesis.speaking && !speechSynthesis.paused) {
+        speechSynthesis.pause();
+      }
+    }
+
+    function resumeText() {
+      if (speechSynthesis.paused) {
+        speechSynthesis.resume();
+      }
+    }
+
+    function stopText() {
+      speechSynthesis.cancel();
+    }
+
+    function goToNextChapter() {
+      const currentIndex = chapterSelect.selectedIndex;
+      if (currentIndex < chapterSelect.options.length - 1) {
+        chapterSelect.selectedIndex = currentIndex + 1;
+        fetchChapter();
+        setTimeout(() => {
+          playText();
+        }, 500); // delay nhẹ để tránh race condition
+      } else {
+        alert("📚 Đã đến chương cuối cùng.");
+      }
+    }
+
+    // Tải chương đầu tiên mặc định
+    window.onload = () => {
+      chapterSelect.value = "0000.txt";
+      fetchChapter();
+    }
+  </script>
+</body>
+</html>
