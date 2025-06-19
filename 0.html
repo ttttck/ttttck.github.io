@@ -2,15 +2,12 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <title>trộm tình BF - Audio</title>
+  <title>Xuyên qua chi bạo lực tu tiên - Audio</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       padding: 20px;
       background-color: #f9f9f9;
-    }
-    select, button, input[type=range], label {
-      margin: 5px;
     }
     #textDisplay {
       margin-top: 20px;
@@ -19,62 +16,55 @@
       border: 1px solid #ccc;
       max-height: 300px;
       overflow-y: auto;
-      line-height: 1.6;
     }
-    span.word {
-      cursor: pointer;
-    }
-    span.word:hover {
-      background-color: yellow;
+    button, select, input[type=range] {
+      margin: 5px;
     }
     .highlight {
       background-color: lightgreen;
     }
-    #progressBar {
-      margin-top: 10px;
-    }
   </style>
 </head>
 <body>
-  <h2>📖 Audio Truyện: Trộm Tình BF (7 bộ)</h2>
+  <h2>📖 Audio Truyện: Xuyên qua chi bạo lực tu tiên</h2>
 
   <label for="chapter">Chọn chương:</label>
   <select id="chapter"></select>
 
-  <label for="voiceSelect">Giọng đọc:</label>
-  <select id="voiceSelect"></select>
-
   <label for="rate">Tốc độ đọc:</label>
   <input type="range" id="rate" min="0.5" max="2" value="1" step="0.1">
 
-  <label><input type="checkbox" id="autoNext"> Tự động chuyển chương tiếp theo</label><br>
+  <label>
+    <input type="checkbox" id="autoNext"> Tự động chuyển chương tiếp theo
+  </label>
+
+  <br>
 
   <button onclick="playText()">▶️ Phát</button>
   <button onclick="pauseText()">⏸️ Tạm dừng</button>
   <button onclick="resumeText()">⏯️ Tiếp tục</button>
   <button onclick="stopText()">⏹️ Dừng</button>
+  <button onclick="back100Words()">⏪ Lùi 100 từ</button>
+  <button onclick="forward100Words()">⏩ Tua 100 từ</button>
 
   <div id="textDisplay"></div>
-  <div id="progressBar">Tiến độ: 0%</div>
 
   <script>
     const chapterSelect = document.getElementById("chapter");
-    const voiceSelect = document.getElementById("voiceSelect");
     const textDisplay = document.getElementById("textDisplay");
     const rateControl = document.getElementById("rate");
     const autoNextCheckbox = document.getElementById("autoNext");
-    const progressBar = document.getElementById("progressBar");
 
     let utterance;
-    let fullText = "";
     let words = [];
-    let wordSpans = [];
+    let chunks = [];
+    let currentChunkIndex = 0;
 
-    const totalChapters = 108;
+    const totalChapters = 723;
     for (let i = 0; i <= totalChapters; i++) {
-      const value = i.toString().padStart(4, '0') + ".txt";
+      const filename = i.toString().padStart(4, '0') + ".txt";
       const option = document.createElement("option");
-      option.value = value;
+      option.value = filename;
       option.textContent = "Chương " + i.toString().padStart(2, '0');
       chapterSelect.appendChild(option);
     }
@@ -82,13 +72,17 @@
     chapterSelect.addEventListener("change", fetchChapter);
 
     function fetchChapter() {
-      const url = `https://ttttck.github.io/tromtinhbf/${chapterSelect.value}`;
+      const url = `https://ttttck.github.io/xuyenquachibaoluctutien/${chapterSelect.value}`;
       fetch(url)
         .then(res => res.text())
         .then(text => {
-          fullText = text;
-          displayText(text);
-          autoSelectForSpeakText();
+          words = text.trim().split(/\s+/);
+          chunks = [];
+          for (let i = 0; i < words.length; i += 100) {
+            chunks.push(words.slice(i, i + 100).join(" "));
+          }
+          currentChunkIndex = 0;
+          displayChunk(currentChunkIndex);
         })
         .catch(err => {
           textDisplay.textContent = "❌ Không tải được chương.";
@@ -96,124 +90,77 @@
         });
     }
 
-    function displayText(text) {
-      const wordArray = text.split(/\s+/);
-      textDisplay.innerHTML = wordArray.map((word, i) => `<span class="word" id="word-${i}" onclick="speakFrom(${i})">${word}</span>`).join(" ");
-      words = wordArray;
-      wordSpans = wordArray.map((_, i) => document.getElementById(`word-${i}`));
+    function displayChunk(index) {
+      textDisplay.textContent = chunks[index] || "";
     }
 
-    function autoSelectForSpeakText() {
-      setTimeout(() => {
-        const range = document.createRange();
-        range.selectNodeContents(textDisplay);
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }, 500);
-    }
+    function speakChunk(index) {
+      if (index >= chunks.length) return;
 
-    function speakFrom(index) {
       stopText();
-      const sliced = words.slice(index).join(" ");
-      speakText(sliced, index);
-    }
-
-    function speakText(text, startIndex = 0) {
-      utterance = new SpeechSynthesisUtterance(text);
+      utterance = new SpeechSynthesisUtterance(chunks[index]);
       utterance.lang = 'vi-VN';
       utterance.rate = parseFloat(rateControl.value);
 
-      const selectedVoice = voiceSelect.value;
-      if (selectedVoice) {
-        const voice = speechSynthesis.getVoices().find(v => v.name === selectedVoice);
-        if (voice) utterance.voice = voice;
-      }
-
-      let currentWordIndex = startIndex;
-
-      utterance.onboundary = function (event) {
-        if (event.name === "word") {
-          wordSpans.forEach(span => span.classList.remove("highlight"));
-          const charIndex = event.charIndex;
-          let sumLength = 0;
-          for (let i = 0; i < words.length; i++) {
-            sumLength += words[i].length + 1;
-            if (sumLength > charIndex) {
-              wordSpans[i]?.classList.add("highlight");
-              const percent = Math.floor((i / words.length) * 100);
-              progressBar.textContent = `Tiến độ: ${percent}%`;
-              break;
+      utterance.onend = () => {
+        currentChunkIndex++;
+        if (currentChunkIndex < chunks.length) {
+          displayChunk(currentChunkIndex);
+          speakChunk(currentChunkIndex);
+        } else {
+          // Nếu hết đoạn và checkbox được chọn thì chuyển chương
+          if (autoNextCheckbox.checked) {
+            const currentIndex = chapterSelect.selectedIndex;
+            if (currentIndex < chapterSelect.options.length - 1) {
+              chapterSelect.selectedIndex = currentIndex + 1;
+              fetchChapter();
+              setTimeout(() => {
+                playText();
+              }, 1000);
+            } else {
+              alert("📘 Đã đến chương cuối cùng.");
             }
           }
         }
       };
 
-      utterance.onend = () => {
-        progressBar.textContent = "Tiến độ: 100%";
-        if (autoNextCheckbox.checked) {
-          goToNextChapter();
-        }
-      };
-
+      displayChunk(index);
       speechSynthesis.speak(utterance);
     }
 
     function playText() {
-      stopText();
-      speakText(fullText);
+      speakChunk(currentChunkIndex);
     }
 
     function pauseText() {
-      if (speechSynthesis.speaking && !speechSynthesis.paused) {
-        speechSynthesis.pause();
-      }
+      if (speechSynthesis.speaking) speechSynthesis.pause();
     }
 
     function resumeText() {
-      if (speechSynthesis.paused) {
-        speechSynthesis.resume();
-      }
+      if (speechSynthesis.paused) speechSynthesis.resume();
     }
 
     function stopText() {
       speechSynthesis.cancel();
-      wordSpans.forEach(span => span.classList.remove("highlight"));
-      progressBar.textContent = "Tiến độ: 0%";
     }
 
-    function goToNextChapter() {
-      const currentIndex = chapterSelect.selectedIndex;
-      if (currentIndex < chapterSelect.options.length - 1) {
-        chapterSelect.selectedIndex = currentIndex + 1;
-        fetchChapter();
-        setTimeout(() => {
-          playText();
-        }, 800);
-      } else {
-        alert("📚 Đã đến chương cuối cùng.");
-      }
+    function back100Words() {
+      stopText();
+      currentChunkIndex = Math.max(0, currentChunkIndex - 1);
+      displayChunk(currentChunkIndex);
+      speakChunk(currentChunkIndex);
     }
 
-    // Load voice list
-    function loadVoices() {
-      const voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith("vi") || v.lang.startsWith("en"));
-      voiceSelect.innerHTML = "";
-      voices.forEach(voice => {
-        const option = document.createElement("option");
-        option.value = voice.name;
-        option.textContent = `${voice.name} (${voice.lang})`;
-        voiceSelect.appendChild(option);
-      });
+    function forward100Words() {
+      stopText();
+      currentChunkIndex = Math.min(chunks.length - 1, currentChunkIndex + 1);
+      displayChunk(currentChunkIndex);
+      speakChunk(currentChunkIndex);
     }
 
     window.onload = () => {
       chapterSelect.value = "0000.txt";
       fetchChapter();
-      loadVoices();
-      if (speechSynthesis.onvoiceschanged !== undefined) {
-        speechSynthesis.onvoiceschanged = loadVoices;
-      }
     };
   </script>
 </body>
