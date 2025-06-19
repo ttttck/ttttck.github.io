@@ -188,13 +188,20 @@
       chapterSelect.value = "0000.txt";
       fetchChapter();
 
-      // Tự xin quyền audio khi trang load (nếu trình duyệt hỗ trợ)
+      // Trick autoplay: cần user click để kích hoạt audio
       document.body.addEventListener("click", () => {
         if (!speechSynthesis.speaking && !speechSynthesis.paused) {
-          speechSynthesis.resume(); // trick để cho phép autoplay
+          speechSynthesis.resume();
         }
       }, { once: true });
     };
+
+    // Giữ không pause khi trang chạy nền (nếu trình duyệt hỗ trợ)
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && speechSynthesis.paused) {
+        speechSynthesis.resume();
+      }
+    });
   </script>
 </body>
 </html>
