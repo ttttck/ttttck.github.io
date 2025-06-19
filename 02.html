@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Xuyên qua chi bạo lực tu tiên - Audio</title>
+  <script src="https://code.responsivevoice.org/responsivevoice.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    #textDisplay, #fullTextDisplay {
+      margin-top: 20px;
+      padding: 10px;
+      background-color: #fff;
+      border: 1px solid #ccc;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    button, select, input[type=range] {
+      margin: 5px;
+    }
+    .highlight {
+      background-color: lightgreen;
+    }
+    #cookieConsent {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #222;
+      color: white;
+      padding: 10px;
+      text-align: center;
+      z-index: 999;
+    }
+    #cookieConsent button {
+      margin-left: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h2>📖 Audio Truyện: Xuyên qua chi bạo lực tu tiên</h2>
+
+  <label for="chapter">Chọn chương:</label>
+  <select id="chapter"></select>
+
+  <label for="voiceSelect">Giọng đọc:</label>
+  <select id="voiceSelect">
+    <option value="male">Nam</option>
+    <option value="female" selected>Nữ</option>
+  </select>
+
+  <label for="rate">Tốc độ đọc:</label>
+  <input type="range" id="rate" min="0.5" max="2" value="1" step="0.1">
+
+  <label>
+    <input type="checkbox" id="autoNext"> Tự động chuyển chương tiếp theo
+  </label>
+
+  <br />
+
+  <button onclick="playText()">▶️ Phát</button>
+  <button onclick="pauseText()">⏸️ Tạm dừng</button>
+  <button onclick="resumeText()">⏯️ Tiếp tục</button>
+  <button onclick="stopText()">⏹️ Dừng</button>
+  <button onclick="back200Words()">⏪ Lùi 200 từ</button>
+  <button onclick="forward200Words()">⏩ Tua 200 từ</button>
+
+  <h4>✅ Phần đang đọc</h4>
+  <div id="textDisplay"></div>
+
+  <h4>📜 Toàn bộ nội dung của chương</h4>
+  <div id="fullTextDisplay"></div>
+
+  <div id="cookieConsent">
+    📢 Trang web sử dụng cookies để nâng cao trải nghiệm.
+    <button onclick="acceptCookies()">Đồng ý</button>
+  </div>
+
+  <script>
+    const chapterSelect = document.getElementById("chapter");
+    const textDisplay = document.getElementById("textDisplay");
+    const fullTextDisplay = document.getElementById("fullTextDisplay");
+    const rateControl = document.getElementById("rate");
+    const autoNextCheckbox = document.getElementById("autoNext");
+    const voiceSelect = document.getElementById("voiceSelect");
+
+    let words = [];
+    let chunks = [];
+    let currentChunkIndex = 0;
+    const totalChapters = 723;
+
+    for (let i = 0; i <= totalChapters; i++) {
+      const filename = i.toString().padStart(4, '0') + ".txt";
+      const option = document.createElement("option");
+      option.value = filename;
+      option.textContent = "Chương " + i.toString().padStart(2, '0');
+      chapterSelect.appendChild(option);
+    }
+
+    chapterSelect.addEventListener("change", fetchChapter);
+
+    function fetchChapter() {
+      stopText();
+      const url = `https://ttttck.github.io/xuyenquachibaoluctutien/${chapterSelect.value}`;
+      fetch(url)
+        .then(res => res.text())
+        .then(text => {
+          words = text.trim().split(/\s+/);
+          chunks = [];
+          for (let i = 0; i < words.length; i += 200) {
+            chunks.push(words.slice(i, i + 200).join(" "));
+          }
+          currentChunkIndex = 0;
+          renderFullText();
+          displayChunk(currentChunkIndex);
+        })
+        .catch(err => {
+          textDisplay.textContent = "❌ Không tải được chương.";
+          fullTextDisplay.textContent = "";
+          console.error(err);
+        });
+    }
+
+    function renderFullText() {
+      fullTextDisplay.innerHTML = words.map((word, index) => {
+        return `<span id="word-${index}">${word}</span> `;
+      }).join("");
+    }
+
+    function highlightCurrentChunk(index) {
+      const start = index * 200;
+      const end = Math.min(start + 200, words.length);
+      for (let i = 0; i < words.length; i++) {
+        const span = document.getElementById(`word-${i}`);
+        if (span) span.classList.remove("highlight");
+      }
+      for (let i = start; i < end; i++) {
+        const span = document.getElementById(`word-${i}`);
+        if (span) span.classList.add("highlight");
+      }
+    }
+
+    function displayChunk(index) {
+      const chunk = chunks[index] || "";
+      textDisplay.textContent = chunk;
+      highlightCurrentChunk(index);
+    }
+
+    function speakChunk(index) {
+      if (index >= chunks.length) return;
+      stopText();
+
+      const chunk = chunks[index];
+      displayChunk(index);
+
+      const voicePref = voiceSelect.value;
+      const rate = parseFloat(rateControl.value);
+      const availableVoices = speechSynthesis.getVoices();
+
+      const vietnameseVoices = availableVoices.filter(v =>
+        v.lang.startsWith('vi') &&
+        (voicePref === 'male' ? v.name.toLowerCase().includes('nam') : v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('nữ'))
+      );
+
+      if (vietnameseVoices.length > 0) {
+        const utterance = new SpeechSynthesisUtterance(chunk);
+        utterance.voice = vietnameseVoices[0];
+        utterance.rate = rate;
+        utterance.onend = () => {
+          currentChunkIndex++;
+          if (currentChunkIndex < chunks.length) {
+            speakChunk(currentChunkIndex);
+          } else if (autoNextCheckbox.checked) {
+            const currentIndex = chapterSelect.selectedIndex;
+            if (currentIndex < chapterSelect.options.length - 1) {
+              chapterSelect.selectedIndex = currentIndex + 1;
+              fetchChapter();
+              setTimeout(() => playText(), 1000);
+            } else {
+              alert("📘 Đã đến chương cuối cùng.");
+            }
+          }
+        };
+        speechSynthesis.speak(utterance);
+      } else {
+        const responsiveVoiceName = voicePref === 'male' ? "Vietnamese Male" : "Vietnamese Female";
+        responsiveVoice.speak(chunk, responsiveVoiceName, {
+          rate,
+          onend: () => {
+            currentChunkIndex++;
+            if (currentChunkIndex < chunks.length) {
+              speakChunk(currentChunkIndex);
+            } else if (autoNextCheckbox.checked) {
+              const currentIndex = chapterSelect.selectedIndex;
+              if (currentIndex < chapterSelect.options.length - 1) {
+                chapterSelect.selectedIndex = currentIndex + 1;
+                fetchChapter();
+                setTimeout(() => playText(), 1000);
+              } else {
+                alert("📘 Đã đến chương cuối cùng.");
+              }
+            }
+          }
+        });
+      }
+    }
+
+    function playText() {
+      speakChunk(currentChunkIndex);
+    }
+
+    function pauseText() {
+      speechSynthesis.pause();
+      responsiveVoice.pause();
+    }
+
+    function resumeText() {
+      speechSynthesis.resume();
+      responsiveVoice.resume();
+    }
+
+    function stopText() {
+      speechSynthesis.cancel();
+      responsiveVoice.cancel();
+    }
+
+    function back200Words() {
+      stopText();
+      currentChunkIndex = Math.max(0, currentChunkIndex - 1);
+      speakChunk(currentChunkIndex);
+    }
+
+    function forward200Words() {
+      stopText();
+      currentChunkIndex = Math.min(chunks.length - 1, currentChunkIndex + 1);
+      speakChunk(currentChunkIndex);
+    }
+
+    function acceptCookies() {
+      document.getElementById("cookieConsent").style.display = "none";
+    }
+
+    if ('wakeLock' in navigator) {
+      let wakeLock = null;
+      const requestWakeLock = async () => {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+        } catch (err) {
+          console.error('Wake Lock error:', err);
+        }
+      };
+      document.addEventListener("visibilitychange", () => {
+        if (wakeLock !== null && document.visibilityState === "visible") {
+          requestWakeLock();
+        }
+      });
+      requestWakeLock();
+    }
+
+    window.speechSynthesis.onvoiceschanged = () => {};
+
+    window.onload = () => {
+      chapterSelect.value = "0000.txt";
+      fetchChapter();
+      document.body.addEventListener("click", () => {
+        responsiveVoice.resume();
+      }, { once: true });
+    };
+  </script>
+</body>
+</html>
