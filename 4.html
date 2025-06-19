@@ -1,18 +1,16 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>trộm tình BF - Audio</title>
+  <script src="https://code.responsivevoice.org/responsivevoice.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
       padding: 20px;
       background-color: #f9f9f9;
     }
-    select, button, input[type=range], label {
-      margin: 5px;
-    }
-    #textDisplay {
+    #textDisplay, #fullTextDisplay {
       margin-top: 20px;
       padding: 10px;
       background-color: #fff;
@@ -20,11 +18,25 @@
       max-height: 300px;
       overflow-y: auto;
     }
-    span.word {
-      cursor: pointer;
+    button, select, input[type=range] {
+      margin: 5px;
     }
-    span.word:hover {
-      background-color: yellow;
+    .highlight {
+      background-color: lightgreen;
+    }
+    #cookieConsent {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #222;
+      color: white;
+      padding: 10px;
+      text-align: center;
+      z-index: 999;
+    }
+    #cookieConsent button {
+      margin-left: 10px;
     }
   </style>
 </head>
@@ -34,36 +46,56 @@
   <label for="chapter">Chọn chương:</label>
   <select id="chapter"></select>
 
+  <label for="voiceSelect">Giọng đọc:</label>
+  <select id="voiceSelect">
+    <option value="male">Nam</option>
+    <option value="female" selected>Nữ</option>
+  </select>
+
   <label for="rate">Tốc độ đọc:</label>
   <input type="range" id="rate" min="0.5" max="2" value="1" step="0.1">
 
-  <label><input type="checkbox" id="autoNext"> Tự động chuyển chương tiếp theo</label>
-  <label><input type="checkbox" id="notifyOnEnd"> Hiện thông báo khi đọc xong</label><br>
+  <label>
+    <input type="checkbox" id="autoNext"> Tự động chuyển chương tiếp theo
+  </label>
+
+  <br />
 
   <button onclick="playText()">▶️ Phát</button>
   <button onclick="pauseText()">⏸️ Tạm dừng</button>
   <button onclick="resumeText()">⏯️ Tiếp tục</button>
   <button onclick="stopText()">⏹️ Dừng</button>
+  <button onclick="back200Words()">⏪ Lùi 200 từ</button>
+  <button onclick="forward200Words()">⏩ Tua 200 từ</button>
 
+  <h4>✅ Phần đang đọc</h4>
   <div id="textDisplay"></div>
+
+  <h4>📜 Toàn bộ nội dung của chương</h4>
+  <div id="fullTextDisplay"></div>
+
+  <div id="cookieConsent">
+    📢 Trang web sử dụng cookies để nâng cao trải nghiệm.
+    <button onclick="acceptCookies()">Đồng ý</button>
+  </div>
 
   <script>
     const chapterSelect = document.getElementById("chapter");
     const textDisplay = document.getElementById("textDisplay");
+    const fullTextDisplay = document.getElementById("fullTextDisplay");
     const rateControl = document.getElementById("rate");
     const autoNextCheckbox = document.getElementById("autoNext");
-    const notifyOnEnd = document.getElementById("notifyOnEnd");
+    const voiceSelect = document.getElementById("voiceSelect");
 
-    let utterance;
-    let fullText = "";
     let words = [];
-
-    // Tạo danh sách chương
+    let chunks = [];
+    let currentChunkIndex = 0;
     const totalChapters = 108;
+
     for (let i = 0; i <= totalChapters; i++) {
-      const value = i.toString().padStart(4, '0') + ".txt";
+      const filename = i.toString().padStart(4, '0') + ".txt";
       const option = document.createElement("option");
-      option.value = value;
+      option.value = filename;
       option.textContent = "Chương " + i.toString().padStart(2, '0');
       chapterSelect.appendChild(option);
     }
@@ -71,101 +103,171 @@
     chapterSelect.addEventListener("change", fetchChapter);
 
     function fetchChapter() {
+      stopText();
       const url = `https://ttttck.github.io/tromtinhbf/${chapterSelect.value}`;
       fetch(url)
         .then(res => res.text())
         .then(text => {
-          fullText = text;
-          displayText(text);
+          words = text.trim().split(/\s+/);
+          chunks = [];
+          for (let i = 0; i < words.length; i += 200) {
+            chunks.push(words.slice(i, i + 200).join(" "));
+          }
+          currentChunkIndex = 0;
+          renderFullText();
+          displayChunk(currentChunkIndex);
         })
         .catch(err => {
           textDisplay.textContent = "❌ Không tải được chương.";
+          fullTextDisplay.textContent = "";
           console.error(err);
         });
     }
 
-    function displayText(text) {
-      const wordArray = text.split(/\s+/);
-      textDisplay.innerHTML = wordArray.map((word, i) => `<span class="word" onclick="speakFrom(${i})">${word}</span>`).join(" ");
-      words = wordArray;
+    function renderFullText() {
+      fullTextDisplay.innerHTML = words.map((word, index) => {
+        return `<span id="word-${index}">${word}</span> `;
+      }).join("");
     }
 
-    function speakFrom(index) {
-      stopText();
-      const sliced = words.slice(index).join(" ");
-      speakText(sliced);
-    }
-
-    function speakText(text) {
-      utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'vi-VN';
-      utterance.rate = parseFloat(rateControl.value);
-
-      utterance.onend = () => {
-        const chapterName = chapterSelect.options[chapterSelect.selectedIndex].textContent;
-        if (notifyOnEnd.checked) {
-          showNotification(chapterName);
-        }
-
-        if (autoNextCheckbox.checked) {
-          goToNextChapter();
-        }
-      };
-
-      speechSynthesis.speak(utterance);
-    }
-
-    function playText() {
-      stopText();
-      speakText(fullText);
-    }
-
-    function pauseText() {
-      if (speechSynthesis.speaking && !speechSynthesis.paused) {
-        speechSynthesis.pause();
+    function highlightCurrentChunk(index) {
+      const start = index * 200;
+      const end = Math.min(start + 200, words.length);
+      for (let i = 0; i < words.length; i++) {
+        const span = document.getElementById(`word-${i}`);
+        if (span) span.classList.remove("highlight");
+      }
+      for (let i = start; i < end; i++) {
+        const span = document.getElementById(`word-${i}`);
+        if (span) span.classList.add("highlight");
       }
     }
 
-    function resumeText() {
-      if (speechSynthesis.paused) {
-        speechSynthesis.resume();
-      }
+    function displayChunk(index) {
+      const chunk = chunks[index] || "";
+      textDisplay.textContent = chunk;
+      highlightCurrentChunk(index);
     }
 
-    function stopText() {
-      speechSynthesis.cancel();
-    }
+    function speakChunk(index) {
+      if (index >= chunks.length) return;
+      stopText();
 
-    function goToNextChapter() {
-      const currentIndex = chapterSelect.selectedIndex;
-      if (currentIndex < chapterSelect.options.length - 1) {
-        chapterSelect.selectedIndex = currentIndex + 1;
-        fetchChapter();
-        setTimeout(() => {
-          playText();
-        }, 500);
+      const chunk = chunks[index];
+      displayChunk(index);
+
+      const voicePref = voiceSelect.value;
+      const rate = parseFloat(rateControl.value);
+      const availableVoices = speechSynthesis.getVoices();
+
+      const vietnameseVoices = availableVoices.filter(v =>
+        v.lang.startsWith('vi') &&
+        (voicePref === 'male' ? v.name.toLowerCase().includes('nam') : v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('nữ'))
+      );
+
+      if (vietnameseVoices.length > 0) {
+        const utterance = new SpeechSynthesisUtterance(chunk);
+        utterance.voice = vietnameseVoices[0];
+        utterance.rate = rate;
+        utterance.onend = () => {
+          currentChunkIndex++;
+          if (currentChunkIndex < chunks.length) {
+            speakChunk(currentChunkIndex);
+          } else if (autoNextCheckbox.checked) {
+            const currentIndex = chapterSelect.selectedIndex;
+            if (currentIndex < chapterSelect.options.length - 1) {
+              chapterSelect.selectedIndex = currentIndex + 1;
+              fetchChapter();
+              setTimeout(() => playText(), 1000);
+            } else {
+              alert("📘 Đã đến chương cuối cùng.");
+            }
+          }
+        };
+        speechSynthesis.speak(utterance);
       } else {
-        alert("📚 Đã đến chương cuối cùng.");
-      }
-    }
-
-    function showNotification(chapterName) {
-      if (Notification.permission === "granted") {
-        new Notification("🎧 Đọc xong chương", {
-          body: `Đã hoàn tất: ${chapterName}`,
-          icon: "https://cdn-icons-png.flaticon.com/512/3658/3658863.png"
+        const responsiveVoiceName = voicePref === 'male' ? "Vietnamese Male" : "Vietnamese Female";
+        responsiveVoice.speak(chunk, responsiveVoiceName, {
+          rate,
+          onend: () => {
+            currentChunkIndex++;
+            if (currentChunkIndex < chunks.length) {
+              speakChunk(currentChunkIndex);
+            } else if (autoNextCheckbox.checked) {
+              const currentIndex = chapterSelect.selectedIndex;
+              if (currentIndex < chapterSelect.options.length - 1) {
+                chapterSelect.selectedIndex = currentIndex + 1;
+                fetchChapter();
+                setTimeout(() => playText(), 1000);
+              } else {
+                alert("📘 Đã đến chương cuối cùng.");
+              }
+            }
+          }
         });
       }
     }
 
-    // Tải chương đầu tiên và xin quyền thông báo
+    function playText() {
+      speakChunk(currentChunkIndex);
+    }
+
+    function pauseText() {
+      speechSynthesis.pause();
+      responsiveVoice.pause();
+    }
+
+    function resumeText() {
+      speechSynthesis.resume();
+      responsiveVoice.resume();
+    }
+
+    function stopText() {
+      speechSynthesis.cancel();
+      responsiveVoice.cancel();
+    }
+
+    function back200Words() {
+      stopText();
+      currentChunkIndex = Math.max(0, currentChunkIndex - 1);
+      speakChunk(currentChunkIndex);
+    }
+
+    function forward200Words() {
+      stopText();
+      currentChunkIndex = Math.min(chunks.length - 1, currentChunkIndex + 1);
+      speakChunk(currentChunkIndex);
+    }
+
+    function acceptCookies() {
+      document.getElementById("cookieConsent").style.display = "none";
+    }
+
+    if ('wakeLock' in navigator) {
+      let wakeLock = null;
+      const requestWakeLock = async () => {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+        } catch (err) {
+          console.error('Wake Lock error:', err);
+        }
+      };
+      document.addEventListener("visibilitychange", () => {
+        if (wakeLock !== null && document.visibilityState === "visible") {
+          requestWakeLock();
+        }
+      });
+      requestWakeLock();
+    }
+
+    window.speechSynthesis.onvoiceschanged = () => {};
+
     window.onload = () => {
       chapterSelect.value = "0000.txt";
       fetchChapter();
-
-      if (Notification.permission !== "granted") {
-        Notification.requestPermission();
-      }
+      document.body.addEventListener("click", () => {
+        responsiveVoice.resume();
+      }, { once: true });
     };
   </script>
 </body>
