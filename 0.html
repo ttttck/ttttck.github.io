@@ -9,7 +9,7 @@
       padding: 20px;
       background-color: #f9f9f9;
     }
-    #textDisplay {
+    #textDisplay, #fullTextDisplay {
       margin-top: 20px;
       padding: 10px;
       background-color: #fff;
@@ -44,14 +44,19 @@
   <button onclick="pauseText()">⏸️ Tạm dừng</button>
   <button onclick="resumeText()">⏯️ Tiếp tục</button>
   <button onclick="stopText()">⏹️ Dừng</button>
-  <button onclick="back100Words()">⏪ Lùi 100 từ</button>
-  <button onclick="forward100Words()">⏩ Tua 100 từ</button>
+  <button onclick="back100Words()">⏪ Lùi 200 từ</button>
+  <button onclick="forward100Words()">⏩ Tua 200 từ</button>
 
+  <h4>✅ Phần đang đọc</h4>
   <div id="textDisplay"></div>
+
+  <h4>📜 Toàn bộ nội dung của chương</h4>
+  <div id="fullTextDisplay"></div>
 
   <script>
     const chapterSelect = document.getElementById("chapter");
     const textDisplay = document.getElementById("textDisplay");
+    const fullTextDisplay = document.getElementById("fullTextDisplay");
     const rateControl = document.getElementById("rate");
     const autoNextCheckbox = document.getElementById("autoNext");
 
@@ -78,26 +83,50 @@
         .then(text => {
           words = text.trim().split(/\s+/);
           chunks = [];
-          for (let i = 0; i < words.length; i += 100) {
-            chunks.push(words.slice(i, i + 100).join(" "));
+          for (let i = 0; i < words.length; i += 200) {
+            chunks.push(words.slice(i, i + 200).join(" "));
           }
           currentChunkIndex = 0;
+          renderFullText();
           displayChunk(currentChunkIndex);
         })
         .catch(err => {
           textDisplay.textContent = "❌ Không tải được chương.";
+          fullTextDisplay.textContent = "";
           console.error(err);
         });
     }
 
+    function renderFullText() {
+      fullTextDisplay.innerHTML = words.map((word, index) => {
+        return `<span id="word-${index}">${word}</span> `;
+      }).join("");
+    }
+
+    function highlightCurrentChunk(index) {
+      const start = index * 200;
+      const end = Math.min(start + 200, words.length);
+      for (let i = 0; i < words.length; i++) {
+        const span = document.getElementById(`word-${i}`);
+        if (span) span.classList.remove("highlight");
+      }
+      for (let i = start; i < end; i++) {
+        const span = document.getElementById(`word-${i}`);
+        if (span) span.classList.add("highlight");
+      }
+    }
+
     function displayChunk(index) {
-      textDisplay.textContent = chunks[index] || "";
+      const chunk = chunks[index] || "";
+      textDisplay.textContent = chunk;
+      highlightCurrentChunk(index);
     }
 
     function speakChunk(index) {
       if (index >= chunks.length) return;
 
       stopText();
+
       utterance = new SpeechSynthesisUtterance(chunks[index]);
       utterance.lang = 'vi-VN';
       utterance.rate = parseFloat(rateControl.value);
@@ -108,15 +137,12 @@
           displayChunk(currentChunkIndex);
           speakChunk(currentChunkIndex);
         } else {
-          // Nếu hết đoạn và checkbox được chọn thì chuyển chương
           if (autoNextCheckbox.checked) {
             const currentIndex = chapterSelect.selectedIndex;
             if (currentIndex < chapterSelect.options.length - 1) {
               chapterSelect.selectedIndex = currentIndex + 1;
               fetchChapter();
-              setTimeout(() => {
-                playText();
-              }, 1000);
+              setTimeout(() => playText(), 1000);
             } else {
               alert("📘 Đã đến chương cuối cùng.");
             }
@@ -161,6 +187,13 @@
     window.onload = () => {
       chapterSelect.value = "0000.txt";
       fetchChapter();
+
+      // Tự xin quyền audio khi trang load (nếu trình duyệt hỗ trợ)
+      document.body.addEventListener("click", () => {
+        if (!speechSynthesis.speaking && !speechSynthesis.paused) {
+          speechSynthesis.resume(); // trick để cho phép autoplay
+        }
+      }, { once: true });
     };
   </script>
 </body>
